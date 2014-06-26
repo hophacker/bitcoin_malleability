@@ -1,0 +1,86 @@
+Binaries are avaialable at server1:/home/ubuntu/bin
+
+Modified version can accept more than 8 connection by default, 
+Linux kernel was adjusted to have more than 1024 sockets available simultaneously
+Connection time and timeout was decreased to speedup connectivity process
+
+Added RPC:
+
+getminerstat <height>
+returns poolname and URL starting from block with height specified in param0 in JSON format
+
+getblocksince
+print the block chain changes, since the block hash provided
+
+getblocktxs
+print the txs in a given block
+
+getavailablenodes
+returns all available nodes mention during discovery process
+
+gettxip
+returns array of ipaddresses for specified tx
+
+gettxcount
+returns number of transaction saved in transaction/IP database
+
+gettxs
+returns all transactions saved in transaction/IP database
+
+getblockdetail <block height>
+return everything in a block, including block information and all information of its transactions 
+
+On top of it there is a crawler deployed to a server, that can collect all fullnodes and save results in JSON format.
+
+Bitcoin Anonimity:
+
+Collecting full worldwide transasction is possible but many companies proposed mechanism that includes generation of new Bitcoin address during payment
+Everyone is encouraged to make up new names for every transaction: When address is paid, you can dereference to your own private transaction
+We can try to merge "fragments"
+There are a lot of end users, who are beyond tor or firewall, they can be also beyond NAT. We can not identify exact person
+
+Discover full nodes,  crawler : place in different locations,and store data to DHT
+Typical crawler utilize: getaddr Bitcoin protocol method, according to a code of Address manager, 
+// the maximum percentage of nodes to return in a getaddr call
+#define ADDRMAN_GETADDR_MAX_PCT 23
+Each node will return only 23% of the connected nodes, and each time shufl it. So we need to try eprircal, who many crawlers we really need to keep track all full nodes
+
+Tracking wallets and miners: 
+We need to setup a lot "our" full nodes with removed 8 nodes limitation and decreased connection timeout, and in different locations: we use Virtual machines or use different ports
+
+To detect miners:
+We can track miners by parsing block chain information, but this way we can only track big "solo" miners
+Most of the PC/GPU miners, use p2pool by using getshares and getblocktemplate pf Bitcoin protocol. For some private there is big chance to have unicast communication between 
+a miner and pool. Each pool need to be inspected with sniffer seperately.
+
+
+Added commands:
+
+-printblockMai: print blocks, transactions to .bitcoin folder
+    -noTXInfo       : don’t print transaction information
+    -noMerkleTreeInfo   : don’t print merkle tree information
+    -noBlkInfo      : don’t print block headers
+    -startHeight        : as it is
+    -endHeight
+    -noInOut        : don’t print vins and vous
+    ex: ./bitcoind -printblock -startHeight=300000 -endHeight=310000
+    TODO: this command needs to be modified to match the format we are using, so it can be directly loaded to MySQL. Also might need a better naming.
+    
+-dumpSql: dump blocks, tranactions, inputs, outputs to blocks.txt, transactions.txt, inputs.txt, and outputs.txt
+    ex. ./bitcoind -dumpSql
+    This command takes about 10 minutes to run. It is for the initial block/transaction loading. After this you can run the incremental adding script. 
+    (TODO: incremental adding script)
+    After the command is done, you should get blocks.txt, trnasactions.txt, inputs.txt, outputs.txt. Those are csv file separated by tabs.
+    * Run the following command to create tables:
+        mysql -u <USER> -p -h<HOST> < blockChain.sql
+    * Then run the following to load data:
+        mysqlimport -u <USER> -p -h<HOST> --lock-tables --use-threads=3 --local listener blocks.txt
+        mysqlimport -u <USER> -p -h<HOST> --lock-tables --use-threads=3 --local listener transactions.txt
+        mysqlimport -u <USER> -p -h<HOST> --lock-tables --use-threads=3 --local listener inputs.txt
+        mysqlimport -u <USER> -p -h<HOST> --lock-tables --use-threads=3 --local listener outputs.txt
+    * Lastly, run the following to add indices:
+        mysql -u <USER> -p -h<HOST> < blockChainIndex.sql  
+     
+    
+        
+      

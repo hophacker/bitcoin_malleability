@@ -11,6 +11,16 @@ std::string COutPoint::ToString() const
 {
     return strprintf("COutPoint(%s, %u)", hash.ToString().substr(0,10), n);
 }
+// [Jie Feng] Added - starts
+std::string COutPoint::ToStringMai() const
+{
+    return strprintf("%s,%u", hash.ToString(), n);
+}
+void COutPoint::printMai() const
+{
+    LogPrintf("%s\n", ToStringMai());
+}
+// [Jie Feng] Added - ends
 
 void COutPoint::print() const
 {
@@ -45,11 +55,32 @@ std::string CTxIn::ToString() const
     str += ")";
     return str;
 }
+// [Jie Feng] Added - starts
+std::string CTxIn::ToString(int offset, std::string&  txid, std::string& block_hash, int block_height) const
+{
+    std::string str;
+    str += strprintf("%s,%d,%s,%d,%s,%u,%d\n",
+    		txid, //txid
+    		offset, //offset
+    		block_hash,
+    		block_height,
+    		prevout.hash.GetHex(), //output_txid
+    		prevout.n,
+    		this->isConbase());
+    return str;
+}
+// [Jie Feng] Added - ends
 
 void CTxIn::print() const
 {
     LogPrintf("%s\n", ToString());
 }
+// [Jie Feng] Added - starts
+void CTxIn::print(int offset, std::string& txid, std::string& block_hash, int block_height) const
+{
+    LogTxIn(ToString(offset, txid, block_hash, block_height));
+}
+// [Jie Feng] Added - ends
 
 CTxOut::CTxOut(int64_t nValueIn, CScript scriptPubKeyIn)
 {
@@ -66,12 +97,43 @@ std::string CTxOut::ToString() const
 {
     return strprintf("CTxOut(nValue=%d.%08d, scriptPubKey=%s)", nValue / COIN, nValue % COIN, scriptPubKey.ToString().substr(0,30));
 }
+// [Jie Feng] Added - starts
+std::string CTxOut::ToString(int offset, std::string& txid, std::string& block_hash, int block_height, bool is_coinbase) const
+{
+    //return strprintf("CTxOut(nValue=%d.%08d, scriptPubKey=%s)", nValue / COIN, nValue % COIN, scriptPubKey.ToString());
+
+    txnouttype type;
+    std::vector<CTxDestination> addressRet;
+    int nRequiredRet;
+    ExtractDestinations(scriptPubKey, type, addressRet, nRequiredRet);
+
+    std::string res;
+    for(int i = 0; i < addressRet.size(); i++){
+     	 res += strprintf("%s,%d,%s,%s,%d,%s,%d\n",
+    		txid,//txid
+    		offset,//offset
+            CBitcoinAddress(addressRet[i]).ToString(),//address
+    		block_hash,
+    		block_height,
+    		toSatoshiStr(nValue),//value
+    		is_coinbase
+    		);
+    }
+    return res;
+}
+// [Jie Feng] Added - ends
 
 void CTxOut::print() const
 {
     LogPrintf("%s\n", ToString());
 }
 
+// [Jie Feng] Added - starts
+void CTxOut::print(int offset, std::string& txid, std::string& block_hash, int block_height, bool is_coinbase) const
+{
+    LogTxOut(ToString(offset, txid, block_hash, block_height, is_coinbase));
+}
+// [Jie Feng] Added - ends
 uint256 CTransaction::GetHash() const
 {
     return SerializeHash(*this);
@@ -153,10 +215,66 @@ std::string CTransaction::ToString() const
     return str;
 }
 
+// [Jie Feng] Added - starts
+/*
+CREATE TABLE `transaction` (
+  `txid` varchar(250) COLLATE utf8_unicode_ci NOT NULL, ##transaction hash
+  `created_at` datetime DEFAULT NULL,  ##
+  `value` decimal(15,8) DEFAULT NULL,  #?
+  `block_height` int(11) DEFAULT NULL,  ##
+  `block_hash` varchar(250) COLLATE utf8_unicode_ci DEFAULT NULL, ##
+  `has_multisig` tinyint(1) DEFAULT NULL,
+  `has_nulldata` tinyint(1) DEFAULT NULL,
+  `has_pubkey` tinyint(1) DEFAULT NULL,
+  `has_pubkeyhash` tinyint(1) DEFAULT NULL,
+  `has_scripthash` tinyint(1) DEFAULT NULL,
+  PRIMARY KEY (`txid`)
+);
+ */
+std::string CTransaction::ToString(std::string& block_hash, int block_height, int nTime) const
+{
+    std::string str;
+
+    string txid = GetHash().GetHex();
+
+    bool is_coinbase = false;
+    for (unsigned int i = 0; i < vin.size(); i++){
+    	vin[i].print(i, txid, block_hash, block_height);
+    	if (vin[i].isConbase()) is_coinbase = true;
+    }
+    //str += "    " + vin[i].ToString() + "\n";
+
+    vin[0].isConbase();
+
+    int sumSatoshiVout = 0;
+    for (unsigned int i = 0; i < vout.size(); i++){
+    	vout[i].print(i, txid, block_hash, block_height, is_coinbase);
+    	sumSatoshiVout += vout[i].nValue;
+    }
+        //str += "    " + vout[i].ToString() + "\n";
+    str += strprintf("%s,%d,%s,%d,%s,%d,%u,%u,%u\n",
+        txid, //txid
+    	nTime, //create_at
+    	toSatoshiStr(sumSatoshiVout), //value
+    	block_height, //block_height
+    	block_hash, //block_hash
+        nVersion, //**nvertion
+        vin.size(),//**vin_size
+        vout.size(), //**vout.size
+        nLockTime); //**LockTime
+    return str;
+}
+// [Jie Feng] Added - ends
 void CTransaction::print() const
 {
     LogPrintf("%s", ToString());
 }
+// [Jie Feng] Added - starts
+void CTransaction::print(string& block_hash, int height, int nTime) const
+{
+    LogTx(ToString(block_hash, height, nTime));
+}
+// [Jie Feng] Added - ends
 
 // Amount compression:
 // * If the amount is 0, output 0
@@ -286,3 +404,39 @@ void CBlock::print() const
         LogPrintf("%s ", vMerkleTree[i].ToString());
     LogPrintf("\n");
 }
+
+// [Jie Feng] Added - starts
+void CBlock::print(int height) const
+{
+
+	string block_hash = GetHash().GetHex();
+	if (!mapArgs.count("-noBlkInfo")){
+		LogBlock(strprintf(
+			"%s,%d,%d,%s,%s,%u,%08x,%u,%u,%d\n",
+        	block_hash,
+        	height,
+        	0,//is_orphaned
+            hashPrevBlock.ToString(),
+            hashMerkleRoot.ToString(),
+            nTime,  //created_at
+            nBits,
+            nNonce,
+            vtx.size(),
+            nVersion
+            ));
+	}
+	if (!mapArgs.count("-noTXInfo")){
+        for (unsigned int i = 0; i < vtx.size(); i++)
+        {
+            LogPrintf("  ");
+            vtx[i].print(block_hash, height, nTime);
+        }
+	}
+	if (!mapArgs.count("-noMerkleTreeInfo")){
+        LogPrintf("  vMerkleTree: ");
+        for (unsigned int i = 0; i < vMerkleTree.size(); i++)
+            LogPrintf("%s ", vMerkleTree[i].ToString());
+        LogPrintf("\n");
+	}
+}
+// [Jie Feng] Added - ends

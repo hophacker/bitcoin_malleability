@@ -36,6 +36,12 @@
 #include <boost/interprocess/sync/file_lock.hpp>
 #include <openssl/crypto.h>
 
+//[Jie Feng] Added - starts
+#include "txipdb.h"
+#include "script.h"
+bool dumpSql();
+//[Jie Feng] Added - ends
+
 using namespace std;
 using namespace boost;
 
@@ -146,6 +152,11 @@ void Shutdown()
     if (pwalletMain)
         delete pwalletMain;
 #endif
+    //[Jie Feng] Added - starts
+    // Close transaction - IP database
+    TxDbClose();
+    //[Jie Feng] Added - ends
+
     LogPrintf("Shutdown : done\n");
 }
 
@@ -497,6 +508,12 @@ bool AppInit2(boost::thread_group& threadGroup)
     int nBind = std::max((int)mapArgs.count("-bind"), 1);
     nMaxConnections = GetArg("-maxconnections", 125);
     nMaxConnections = std::max(std::min(nMaxConnections, (int)(FD_SETSIZE - nBind - MIN_CORE_FILEDESCRIPTORS)), 0);
+
+    //[Jie Feng] Added - starts
+    nMaxOutboundConnections = GetArg("-maxoutboundconnections", 8);
+    nConnectionRetrySleep = GetArg("-connectionretrysleep", 120000);
+    //[Jie Feng] Added - ends
+
     int nFD = RaiseFileDescriptorLimit(nMaxConnections + MIN_CORE_FILEDESCRIPTORS);
     if (nFD < MIN_CORE_FILEDESCRIPTORS)
         return InitError(_("Not enough file descriptors available."));
@@ -928,6 +945,43 @@ bool AppInit2(boost::thread_group& threadGroup)
             LogPrintf("No blocks matching %s were found\n", strMatch);
         return false;
     }
+// [Jie Feng] Added - starts
+    if (mapArgs.count("-printblockMai"))
+    {
+        string strMatch = mapArgs["-printblockMai"];
+        int nFound = 0;
+        int startHeight = toi(mapArgs["-startHeight"]);
+        int endHeight = toi(mapArgs["-endHeight"]);
+        cout << "startHeight: " << startHeight << endl;
+        cout << "endHeight: " << endHeight << endl;
+        int maxH = 0;
+        for (map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.begin(); mi != mapBlockIndex.end(); ++mi)
+        {
+        	int height = mi->second->nHeight;
+        	maxH = max(maxH, height);//jie
+        	if (height < startHeight || height > endHeight) continue; //jie
+            uint256 hash = (*mi).first;
+            if (strncmp(hash.ToString().c_str(), strMatch.c_str(), strMatch.size()) == 0)
+            {
+                CBlockIndex* pindex = (*mi).second;
+                CBlock block;
+                ReadBlockFromDisk(block, pindex);
+                block.BuildMerkleTree();
+                //block.print();
+                block.print(height);
+                LogPrintf("\n");
+                nFound++;
+            }
+        }
+        cout << "blocksize in disk: " << mapBlockIndex.size() << endl; //jie
+        cout << "blocks's maxHeight in disk: " << maxH << endl; //jie
+        return false;
+    }
+    if(mapArgs.count("-dumpSql"))
+    {
+        return dumpSql();
+    }
+// [Jie Feng] Added - ends
 
     // ********************************************************* Step 8: load wallet
 #ifdef ENABLE_WALLET
@@ -1070,6 +1124,10 @@ bool AppInit2(boost::thread_group& threadGroup)
            addrman.size(), GetTimeMillis() - nStart);
 
     // ********************************************************* Step 11: start node
+    //[Jie Feng] Added - starts
+    if (true != TxDbInit())
+    	return false;
+    //[Jie Feng] Added - ends
 
     if (!CheckDiskSpace())
         return false;
@@ -1116,3 +1174,96 @@ bool AppInit2(boost::thread_group& threadGroup)
 
     return !fRequestShutdown;
 }
+
+
+//[Jie Feng] Added - starts
+bool dumpSql()
+{
+    int txID = 1;
+    int outputID = 1;
+    int inputID = 1;
+    FILE *txFile = fopen("transactions.txt", "w");
+    FILE *blockFile = fopen("blocks.txt", "w");
+    FILE *inputFile = fopen("inputs.txt", "w");
+    FILE *outputFile = fopen("outputs.txt", "w");
+    if(!txFile || !blockFile || !inputFile || !outputFile)
+    {
+        cout << "couldn't open file for writing\n" << endl;
+        return false;
+    }
+
+    for (map<uint256, CBlockIndex*>::iterator mi = mapBlockIndex.begin(); mi != mapBlockIndex.end(); ++mi)
+    {
+        uint256 hash = (*mi).first;
+        int height = mi->second->nHeight;
+        CBlockIndex* pindex = (*mi).second;
+        CBlock block;
+        ReadBlockFromDisk(block, pindex);
+        //1. Print block
+        int blockID = (height);
+        cout << "blockID, blockHash, time:"<< blockID << ","<< block.GetHash().GetHex() << "," << (block.nTime) << endl;
+        fprintf(blockFile,
+                "%" PRIu64 "\t"
+                "%s\t"
+                "%" PRIu64 "\n",
+                blockID, block.GetHash().GetHex().c_str(), (uint64_t)block.nTime);
+        //2. Print transactions
+        for (unsigned int txI = 0; txI < block.vtx.size(); txI++)
+        {
+            CTransaction tx = block.vtx[txI];
+            string txHash = tx.GetHash().GetHex();
+            fprintf(txFile,
+                    "%" PRIu64 "\t"
+                    "%s\t"
+                    "%" PRIu64 "\n",
+                    txID, tx.GetHash().GetHex().c_str(), blockID);
+            //2.1 Print vouts
+            for (unsigned int voutI = 0; voutI < tx.vout.size(); voutI++)
+            {
+                CTxOut vout = tx.vout[voutI];
+                std::vector<CTxDestination> addressRet;
+                int nRequiredRet;
+                txnouttype type;
+                ExtractDestinations(vout.scriptPubKey, type, addressRet, nRequiredRet);
+                for(unsigned int addrI = 0; addrI < addressRet.size(); addrI++)
+                {
+                    fprintf(outputFile,
+                            "%" PRIu64 "\t"
+                            "%s\t"
+                            "%" PRIu64 "\t"
+                            "%s\t"
+                            "%" PRIu32 "\n",
+                            outputID,
+                            CBitcoinAddress(addressRet[addrI]).ToString().c_str(),
+                            vout.nValue,
+                            txHash.c_str(),
+                            (uint32_t)voutI
+                        );
+                    outputID++;
+                }
+            }
+            //2.2 Print vins
+            for (unsigned int vinI = 0; vinI < tx.vin.size(); vinI++)
+            {
+                CTxIn vin = tx.vin[vinI];
+                fprintf(
+                    inputFile,
+                    "%" PRIu64 "\t"
+                    "%s\t"
+                    "%s\t"
+                    "%" PRIu32 "\t"
+                    "%" PRIu32 "\n",
+                    inputID,
+                    txHash.c_str(),
+                    vin.prevout.hash.GetHex().c_str(),
+                    (uint32_t)vin.prevout.n,
+                    (uint32_t)vinI
+                );
+                inputID++;
+            }
+            txID++;
+        }
+    }
+    return false;
+}
+//[Jie Feng] Added - ends

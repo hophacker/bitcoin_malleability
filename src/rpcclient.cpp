@@ -176,7 +176,11 @@ Array RPCConvertValues(const std::string &strMethod, const std::vector<std::stri
     if (strMethod == "verifychain"            && n > 1) ConvertTo<int64_t>(params[1]);
     if (strMethod == "keypoolrefill"          && n > 0) ConvertTo<int64_t>(params[0]);
     if (strMethod == "getrawmempool"          && n > 0) ConvertTo<bool>(params[0]);
-
+    //[Jie Feng] Added - starts
+    if (strMethod == "getminerstat"           && n > 0) ConvertTo<boost::int64_t>(params[0]);
+    if (strMethod == "getblockdetail"              && n > 0) ConvertTo<int64_t>(params[0]);
+    //if (strMethod == "gettxip"                && n > 0) ConvertTo<std::string>(params[0]);
+    //[Jie Feng] Added - ends
     return params;
 }
 

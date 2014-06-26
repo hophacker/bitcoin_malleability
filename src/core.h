@@ -9,6 +9,9 @@
 #include "script.h"
 #include "serialize.h"
 #include "uint256.h"
+// [Jie Feng] Added - starts
+#include "base58.h"
+// [Jie Feng] Added - ends
 
 #include <stdint.h>
 
@@ -48,6 +51,10 @@ public:
 
     std::string ToString() const;
     void print() const;
+// [Jie Feng] Added - starts
+    string ToStringMai() const;
+    void printMai() const;
+// [Jie Feng] Added - ends
 };
 
 /** An inpoint - a combination of a transaction and an index n into its vin */
@@ -108,6 +115,13 @@ public:
 
     std::string ToString() const;
     void print() const;
+// [Jie Feng] Added - starts
+    bool isConbase()const{
+    	return prevout.n == (unsigned)-1;
+    }
+    std::string ToString(int offset, std::string& txid, std::string& block_hash, int block_height) const;
+    void print(int offset, std::string& txid, std::string& block_hash, int block_height) const;
+// [Jie Feng] Added - ends
 };
 
 
@@ -174,6 +188,10 @@ public:
 
     std::string ToString() const;
     void print() const;
+// [Jie Feng] Added - starts
+    std::string ToString(int offset, std::string& txid, std::string& block_hash, int block_height, bool is_coinbase) const;
+    void print(int offset, std::string& txid, std::string& block_hash, int block_height, bool is_coinbase) const;
+// [Jie Feng] Added - ends
 };
 
 
@@ -250,6 +268,10 @@ public:
 
     std::string ToString() const;
     void print() const;
+// [Jie Feng] Added - starts
+    std::string ToString(std::string& block_hash, int height, int nTime) const;
+    void print(std::string& block_hash, int height, int nTime) const;
+// [Jie Feng] Added - ends
 };
 
 /** wrapper for CTxOut that provides a more compact serialization */
@@ -449,6 +471,9 @@ public:
     std::vector<uint256> GetMerkleBranch(int nIndex) const;
     static uint256 CheckMerkleBranch(uint256 hash, const std::vector<uint256>& vMerkleBranch, int nIndex);
     void print() const;
+// [Jie Feng] Added - starts
+    void print(int height) const;
+// [Jie Feng] Added - ends
 };
 
 

@@ -22,6 +22,9 @@
 #include <string>
 #include <utility>
 #include <vector>
+// [Jie Feng] Added - starts
+#include <sstream>
+// [Jie Feng] Added - ends
 
 #ifndef WIN32
 #include <sys/resource.h>
@@ -108,10 +111,21 @@ void RandAddSeed();
 void RandAddSeedPerfmon();
 void SetupEnvironment();
 
+//[Jie Feng] Added - starts
+//Add by MaxGuan
+int printToFile(const char *fileName, const char* pszFormat, ...);
+//[Jie Feng] Added - ends
+
 /* Return true if log accepts specified category */
 bool LogAcceptCategory(const char* category);
 /* Send a string to the log output */
 int LogPrintStr(const std::string &str);
+// [Jie Feng] Added - starts
+int LogTx(const std::string &str);
+int LogBlock(const std::string &str);
+int LogTxIn(const std::string &str);
+int LogTxOut(const std::string &str);
+// [Jie Feng] Added - ends
 
 #define strprintf tfm::format
 #define LogPrintf(...) LogPrint(NULL, __VA_ARGS__)
@@ -572,4 +586,9 @@ template <typename Callable> void TraceThread(const char* name,  Callable func)
     }
 }
 
+// [Jie Feng] Added - starts
+template<class T> std::string toSatoshiStr(T nValue) {return strprintf("%d.%08d", nValue / COIN, nValue % COIN);}
+template<class T> std::string tos(T n) { std::stringstream ss; ss << n; return ss.str(); }
+template<class T> int toi(T s) { std::stringstream ss; ss << s; int n; ss >> n; return n; }
+// [Jie Feng] Added - ends
 #endif

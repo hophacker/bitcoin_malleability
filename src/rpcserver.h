@@ -188,4 +188,15 @@ extern json_spirit::Value gettxoutsetinfo(const json_spirit::Array& params, bool
 extern json_spirit::Value gettxout(const json_spirit::Array& params, bool fHelp);
 extern json_spirit::Value verifychain(const json_spirit::Array& params, bool fHelp);
 
+//[Jie Feng] Added - starts
+extern json_spirit::Value getminerstat(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value gettxip(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value gettxcount(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value gettxs(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getblocksince(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getblocktxs(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getavailablenodes(const json_spirit::Array& params, bool fHelp);
+extern json_spirit::Value getblockdetail(const json_spirit::Array& params, bool fHelp);
+//[Jie Feng] Added - ends
+
 #endif

@@ -3,6 +3,9 @@
 // Distributed under the MIT/X11 software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+//[Jie Feng] Added - starts
+#include "init.h"
+//[Jie Feng] Added - ends
 #include "main.h"
 
 #include "addrman.h"
@@ -22,6 +25,13 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/filesystem/fstream.hpp>
+
+//[Jie Feng] Added - starts
+#include "json/json_spirit_writer_template.h"
+#include "json/json_spirit_utils.h"
+#include "txipdb.h"
+#include <sstream>
+//[Jie Feng] Added - ends
 
 using namespace std;
 using namespace boost;
@@ -3369,6 +3379,12 @@ void static ProcessGetData(CNode* pfrom)
     }
 }
 
+//[Jie Feng] Added - starts
+// MaxGuan: include for getblocktxs function only
+void TxToJSON(const CTransaction& tx, const uint256 hashBlock, json_spirit::Object& entry);
+//[Jie Feng] Added - ends
+
+
 bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 {
     RandAddSeedPerfmon();
@@ -3724,8 +3740,25 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
 
         bool fMissingInputs = false;
         CValidationState state;
+
+        //[Jie Feng] Added - starts
+        using namespace json_spirit;
+        Object obj;
+        TxToJSON(tx, 0, obj);
+        obj.push_back(Pair("relayedFrom", pfrom->addr.ToString().c_str()));
+        obj.push_back(Pair("timeReceived", DateTimeStrFormat("%Y-%m-%d %H:%M:%S", GetTime()).c_str()));
+		if (true != AddValueToTxIpDb(tx.GetHash().ToString(), pfrom->addr.ToString())){
+			LogPrint("net", "Can not add tx ip to levelDB, key = %s, value = %s", tx.GetHash().ToString(), pfrom->addr.ToString());
+		}
+        //[Jie Feng] Added - ends
+
         if (AcceptToMemoryPool(mempool, state, tx, true, &fMissingInputs))
         {
+        	//[Jie Feng] Added - starts
+        	printToFile("acceptedTxs.txt", "%s\n", write_string(Value(obj), false).c_str());
+        	obj.push_back(Pair("acceptedToMemPool", true));
+        	//[Jie Feng] Added - ends
+
             mempool.check(pcoinsTip);
             RelayTransaction(tx, inv.hash);
             mapAlreadyAskedFor.erase(inv);
@@ -3757,6 +3790,14 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
                     if (AcceptToMemoryPool(mempool, stateDummy, orphanTx, true, &fMissingInputs2))
                     {
                         LogPrint("mempool", "   accepted orphan tx %s\n", orphanHash.ToString());
+
+                        //[Jie Feng] Added - starts
+                        Object objOrphan;
+                        TxToJSON(orphanTx, 0, objOrphan);
+                        obj.push_back(Pair("orphan", true));
+                        printToFile("acceptedTxs.txt", "%s\n", write_string(Value(obj), false).c_str());
+                        //[Jie Feng] Added - ends
+
                         RelayTransaction(orphanTx, orphanHash);
                         mapAlreadyAskedFor.erase(CInv(MSG_TX, orphanHash));
                         vWorkQueue.push_back(orphanHash);
@@ -3777,6 +3818,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
         }
         else if (fMissingInputs)
         {
+        	//[Jie Feng] Added - starts
+        	obj.push_back(Pair("orphan", true));
+        	//[Jie Feng] Added - ends
+
             AddOrphanTx(tx);
 
             // DoS prevention: do not allow mapOrphanTransactions to grow unbounded
@@ -3790,11 +3835,27 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv)
             LogPrint("mempool", "%s from %s %s was not accepted into the memory pool: %s\n", tx.GetHash().ToString(),
                 pfrom->addr.ToString(), pfrom->cleanSubVer,
                 state.GetRejectReason());
+
+            //[Jie Feng] Added - starts
+            obj.push_back(Pair("invalid", true));
+            //[Jie Feng] Added - ends
+
             pfrom->PushMessage("reject", strCommand, state.GetRejectCode(),
                                state.GetRejectReason(), inv.hash);
             if (nDoS > 0)
                 Misbehaving(pfrom->GetId(), nDoS);
         }
+
+        //[Jie Feng] Added - starts
+        printToFile("allTxs.txt", "%s\n", write_string(Value(obj), false).c_str());
+        // [START] Yute Lin: add node to redis list "discovered_txs" and publish to channel "tx_discovered"
+        ///1. Add to redis
+        std::string command =  "/usr/local/bin/redis-cli -a teammaicoin RPUSH discovered_txs '"+ write_string(Value(obj), false) + "'" +
+        	";" +"/usr/local/bin/redis-cli -a teammaicoin PUBLISH tx_discovered "+ tx.GetHash().ToString();
+        FILE* pipe  = popen(command.c_str(), "r");
+        pclose(pipe);
+        // [END]
+        //[Jie Feng] Added - ends
     }
 
 

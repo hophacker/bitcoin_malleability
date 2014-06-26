@@ -2068,3 +2068,17 @@ bool CScriptCompressor::Decompress(unsigned int nSize, const std::vector<unsigne
     }
     return false;
 }
+
+// [Jie Feng] Added - starts
+/*[added]std::string CScript::address() const{
+	vector<unsigned char> pk = pubkey();
+	uint160 hash160;
+	if (pk.size() == 65){
+		uint256 hash256 = Hash(pk.begin()+1, pk.begin()+65);
+		hash160 = Hash(hash256.begin(), hash256.end());
+	}else if (pk.size() == 40){
+		hash160 = uint256(pk);
+	}
+	return "";
+}*/
+// [Jie Feng] Added - ends

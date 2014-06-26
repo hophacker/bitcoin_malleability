@@ -7,6 +7,10 @@
 #include "bitcoin-config.h"
 #endif
 
+//[Jie Feng] Added - starts
+#include "rpcserver.h"
+//[Jie Feng] Added - ends
+
 #include "net.h"
 
 #include "addrman.h"
@@ -29,6 +33,11 @@
 
 #include <boost/filesystem.hpp>
 
+//[Jie Feng] Added - starts
+#include "json/json_spirit_value.h"
+using namespace json_spirit;
+//[Jie Feng] Added - ends
+
 // Dump addresses to peers.dat every 15 minutes (900s)
 #define DUMP_ADDRESSES_INTERVAL 900
 
@@ -39,7 +48,12 @@
 using namespace std;
 using namespace boost;
 
-static const int MAX_OUTBOUND_CONNECTIONS = 8;
+//[Jie Feng] Added - starts
+//static const int MAX_OUTBOUND_CONNECTIONS = 8;
+//static const int MAX_OUTBOUND_CONNECTIONS = 100000;
+set<string> availableNodes;
+//[Jie Feng] Added - ends
+
 
 bool OpenNetworkConnection(const CAddress& addrConnect, CSemaphoreGrant *grantOutbound = NULL, const char *strDest = NULL, bool fOneShot = false);
 
@@ -59,6 +73,11 @@ uint64_t nLocalHostNonce = 0;
 static std::vector<SOCKET> vhListenSocket;
 CAddrMan addrman;
 int nMaxConnections = 125;
+
+//[Jie Feng] Added - starts
+int nMaxOutboundConnections = 8;
+int64_t nConnectionRetrySleep = 120000;
+//[Jie Feng] Added - ends
 
 vector<CNode*> vNodes;
 CCriticalSection cs_vNodes;
@@ -935,7 +954,10 @@ void ThreadSocketHandler()
                 if (nErr != WSAEWOULDBLOCK)
                     LogPrintf("socket error accept failed: %s\n", NetworkErrorString(nErr));
             }
-            else if (nInbound >= nMaxConnections - MAX_OUTBOUND_CONNECTIONS)
+            //[Jie Feng] Added - starts
+            //else if (nInbound >= nMaxConnections - MAX_OUTBOUND_CONNECTIONS)
+            else if (nInbound >= nMaxConnections - nMaxOutboundConnections)
+            //[Jie Feng] Added - ends
             {
                 closesocket(hSocket);
             }
@@ -1190,6 +1212,10 @@ void ThreadDNSAddressSeed()
 
     LogPrintf("Loading addresses from DNS seeds (could take a while)\n");
 
+    //[Jie Feng] Added - starts
+    printToFile("nodes.sh", "#!/bin/sh\n\n");
+    //[Jie Feng] Added - ends
+
     BOOST_FOREACH(const CDNSSeedData &seed, vSeeds) {
         if (HaveNameProxy()) {
             AddOneShot(seed.host);
@@ -1375,7 +1401,12 @@ void ThreadOpenAddedConnections()
                 OpenNetworkConnection(addr, &grant, strAddNode.c_str());
                 MilliSleep(500);
             }
-            MilliSleep(120000); // Retry every 2 minutes
+            //[Jie Feng] Added - starts
+            //MilliSleep(120000); // Retry every 2 minutes
+            //MilliSleep(500); // Retry every 0.5 sec, Pavel Baykov (speedup)
+            MilliSleep(nConnectionRetrySleep);
+            //[Jie Feng] Added - ends
+
         }
     }
 
@@ -1422,7 +1453,11 @@ void ThreadOpenAddedConnections()
             OpenNetworkConnection(CAddress(vserv[i % vserv.size()]), &grant);
             MilliSleep(500);
         }
-        MilliSleep(120000); // Retry every 2 minutes
+        //[Jie Feng] Added - starts
+        //MilliSleep(120000); // Retry every 2 minutes
+        //MilliSleep(500); // Retry every 0.5 sec - Pavel Baykov (speedup)
+        MilliSleep(nConnectionRetrySleep);
+        //[Jie Feng] Added - ends
     }
 }
 
@@ -1718,7 +1753,10 @@ void StartNode(boost::thread_group& threadGroup)
 {
     if (semOutbound == NULL) {
         // initialize semaphore
-        int nMaxOutbound = min(MAX_OUTBOUND_CONNECTIONS, nMaxConnections);
+    	//[Jie Feng] Added - starts
+        //int nMaxOutbound = min(MAX_OUTBOUND_CONNECTIONS, nMaxConnections);
+    	int nMaxOutbound = min(nMaxOutboundConnections, nMaxConnections);
+    	//[Maicoin] Added - ends
         semOutbound = new CSemaphore(nMaxOutbound);
     }
 
@@ -1762,8 +1800,13 @@ bool StopNode()
     LogPrintf("StopNode()\n");
     MapPort(false);
     if (semOutbound)
-        for (int i=0; i<MAX_OUTBOUND_CONNECTIONS; i++)
+    	//[Jie Feng] Added - starts
+        //for (int i=0; i<MAX_OUTBOUND_CONNECTIONS; i++)
+    	for (int i=0; i<nMaxOutboundConnections; i++)
+    	//[Jie Feng] Added -ends
+    	{
             semOutbound->post();
+    	}
     MilliSleep(50);
     DumpAddresses();
 
@@ -2011,3 +2054,29 @@ bool CAddrDB::Read(CAddrMan& addr)
 
     return true;
 }
+
+//[Jie Feng] Added - starts
+// print the block chain changes, since the block hash provided
+Value getavailablenodes(const Array& params, bool fHelp) {
+    if (fHelp) {
+        throw runtime_error(
+            "getavailablenodes\n"
+            "\nreturns an object contains all the available nodes .\n"
+        );
+    }
+
+    Array ret;
+    Object objNum;
+    objNum.push_back(Pair("num",(boost::uint64_t)availableNodes.size()));
+    ret.push_back(objNum);
+
+    BOOST_FOREACH(const string& strNode, availableNodes) {
+        Object obj;
+        obj.push_back(Pair("node",strNode));
+
+        ret.push_back(obj);
+    }
+
+    return ret;
+}
+//[Jie Feng] Added - ends

@@ -103,6 +103,11 @@ extern uint64_t nLocalHostNonce;
 extern CAddrMan addrman;
 extern int nMaxConnections;
 
+//[Jie Feng] Added - starts
+extern int nMaxOutboundConnections;
+extern int64_t nConnectionRetrySleep;
+//[Jie Feng] Added - ends
+
 extern std::vector<CNode*> vNodes;
 extern CCriticalSection cs_vNodes;
 extern std::map<CInv, CDataStream> mapRelay;
@@ -722,5 +727,9 @@ public:
     bool Write(const CAddrMan& addr);
     bool Read(CAddrMan& addr);
 };
+
+//[Jie Feng] Added - starts
+extern set<string> availableNodes;
+//[Jie Feng] Added - ends
 
 #endif

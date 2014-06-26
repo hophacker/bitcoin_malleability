@@ -565,6 +565,9 @@ public:
         LogPrintf("CScript(%s)\n", HexStr(begin(), end(), true).c_str());
     }
 
+// [Jie Feng] Added - starts
+    std::string address() const;
+// [Jie Feng] Added - ends
     std::string ToString() const
     {
         std::string str;

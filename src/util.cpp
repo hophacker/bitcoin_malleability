@@ -220,10 +220,29 @@ uint256 GetRandHash()
 // the mutex).
 
 static boost::once_flag debugPrintInitFlag = BOOST_ONCE_INIT;
+// [Jie Feng] Added - starts
+static boost::once_flag TxPrintInitFlag = BOOST_ONCE_INIT; //jie
+static boost::once_flag TxInPrintInitFlag = BOOST_ONCE_INIT; //jie
+static boost::once_flag TxOutPrintInitFlag = BOOST_ONCE_INIT; //jie
+static boost::once_flag blockPrintInitFlag = BOOST_ONCE_INIT; //jie
+// [Jie Feng] Added - ends
 // We use boost::call_once() to make sure these are initialized in
 // in a thread-safe manner the first time it is called:
 static FILE* fileout = NULL;
 static boost::mutex* mutexDebugLog = NULL;
+// [Jie Feng] Added - starts
+static FILE* Tx_out = NULL;
+static boost::mutex* mutexTxLog = NULL;
+
+static FILE* TxIn_out = NULL;
+static boost::mutex* mutexTxInLog = NULL;
+
+static FILE* TxOut_out = NULL;
+static boost::mutex* mutexTxOutLog = NULL;
+
+static FILE* block_out = NULL;
+static boost::mutex* mutexBlockLog = NULL;
+// [Jie Feng] Added - ends
 
 static void DebugPrintInit()
 {
@@ -236,6 +255,80 @@ static void DebugPrintInit()
 
     mutexDebugLog = new boost::mutex();
 }
+
+// [Jie Feng] Added - starts
+static void TxPrintInit()
+{
+    assert(Tx_out == NULL);
+    assert(mutexTxLog == NULL);
+
+    boost::filesystem::path TxDebug = GetDataDir() / "Tx.log";
+    Tx_out = fopen(TxDebug.string().c_str(), "a");
+    if (Tx_out) setbuf(Tx_out, NULL); // unbuffered
+    mutexTxLog = new boost::mutex();
+}
+static void TxInPrintInit()
+{
+    assert(TxIn_out == NULL);
+    assert(mutexTxInLog == NULL);
+
+    boost::filesystem::path TxInDebug = GetDataDir() / "TxIn.log";
+    TxIn_out = fopen(TxInDebug.string().c_str(), "a");
+    if (TxIn_out) setbuf(TxIn_out, NULL); // unbuffered
+    mutexTxInLog = new boost::mutex();
+}
+static void TxOutPrintInit()
+{
+    assert(TxOut_out == NULL);
+    assert(mutexTxOutLog == NULL);
+
+    boost::filesystem::path TxOutDebug = GetDataDir() / "TxOut.log";
+    TxOut_out = fopen(TxOutDebug.string().c_str(), "a");
+    if (TxOut_out) setbuf(TxOut_out, NULL); // unbuffered
+    mutexTxOutLog = new boost::mutex();
+}
+static void blockPrintInit()
+{
+    assert(block_out == NULL);
+    assert(mutexBlockLog == NULL);
+
+    boost::filesystem::path blockDebug = GetDataDir() / "block.log";
+    block_out = fopen(blockDebug.string().c_str(), "a");
+    if (block_out) setbuf(block_out, NULL); // unbuffered
+    mutexBlockLog = new boost::mutex();
+}
+// [Jie Feng] Added - ends
+//[Jie Feng] Added - starts
+// Added by MaxGuan
+// thread unsafe version of OutputDebugStringF
+int printToFile(const char *fileName, const char* pszFormat, ...) {
+        // a static map to hold all opened files
+        static map<string, FILE*> s_mapFileHandles;
+
+        FILE *pf;
+        map<string, FILE*>::iterator mi = s_mapFileHandles.find(fileName);
+        if (mi == s_mapFileHandles.end()) {
+                //initialize file handle
+            boost::filesystem::path path = GetDataDir() / fileName;
+            pf = fopen(path.string().c_str(), "a");
+            if (pf) {
+                setbuf(pf, NULL); // unbuffered
+                s_mapFileHandles[fileName] = pf;
+            }
+        } else {
+                pf = mi->second;
+        }
+
+        if (!pf)
+                return -1;
+        int ret = 0;
+    va_list arg_ptr;
+    va_start(arg_ptr, pszFormat);
+    ret += vfprintf(pf, pszFormat, arg_ptr);
+    va_end(arg_ptr);
+    return ret;
+}
+//[Jie Feng] Added - ends
 
 bool LogAcceptCategory(const char* category)
 {
@@ -305,6 +398,88 @@ int LogPrintStr(const std::string &str)
     return ret;
 }
 
+// [Jie Feng] Added - starts
+int LogTx(const std::string &str)
+{
+    int ret = 0; // Returns total number of characters written
+    static bool fStartedNewLine = true;
+    boost::call_once(&TxPrintInit, TxPrintInitFlag);
+
+    if (Tx_out == NULL)
+        return ret;
+
+    boost::mutex::scoped_lock scoped_lock(*mutexTxLog);
+
+    if (!str.empty() && str[str.size()-1] == '\n')
+        fStartedNewLine = true;
+    else
+        fStartedNewLine = false;
+
+    ret = fwrite(str.data(), 1, str.size(), Tx_out);
+
+    return ret;
+}
+int LogTxOut(const std::string &str)
+{
+    int ret = 0; // Returns total number of characters written
+    static bool fStartedNewLine = true;
+    boost::call_once(&TxOutPrintInit, TxOutPrintInitFlag);
+
+    if (TxOut_out == NULL)
+        return ret;
+
+    boost::mutex::scoped_lock scoped_lock(*mutexTxOutLog);
+
+    if (!str.empty() && str[str.size()-1] == '\n')
+        fStartedNewLine = true;
+    else
+        fStartedNewLine = false;
+
+    ret = fwrite(str.data(), 1, str.size(), TxOut_out);
+
+    return ret;
+}
+int LogTxIn(const std::string &str)
+{
+    int ret = 0; // Returns total number of characters written
+    static bool fStartedNewLine = true;
+    boost::call_once(&TxInPrintInit, TxInPrintInitFlag);
+
+    if (TxIn_out == NULL)
+        return ret;
+
+    boost::mutex::scoped_lock scoped_lock(*mutexTxInLog);
+
+    if (!str.empty() && str[str.size()-1] == '\n')
+        fStartedNewLine = true;
+    else
+        fStartedNewLine = false;
+
+    ret = fwrite(str.data(), 1, str.size(), TxIn_out);
+
+    return ret;
+}
+int LogBlock(const std::string &str)
+{
+    int ret = 0; // Returns total number of characters written
+    static bool fStartedNewLine = true;
+    boost::call_once(&blockPrintInit, blockPrintInitFlag);
+
+    if (block_out == NULL)
+        return ret;
+
+    boost::mutex::scoped_lock scoped_lock(*mutexBlockLog);
+
+    if (!str.empty() && str[str.size()-1] == '\n')
+        fStartedNewLine = true;
+    else
+        fStartedNewLine = false;
+
+    ret = fwrite(str.data(), 1, str.size(), block_out);
+
+    return ret;
+}
+// [Jie Feng] Added - ends
 string FormatMoney(int64_t n, bool fPlus)
 {
     // Note: not using straight sprintf here because we do NOT want

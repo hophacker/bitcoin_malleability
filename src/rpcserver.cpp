@@ -315,6 +315,16 @@ static const CRPCCommand vRPCCommands[] =
     { "getwork",                &getwork,                true,      false,      true  },
     { "setgenerate",            &setgenerate,            true,      true,       false },
 #endif // ENABLE_WALLET
+    //[Jie Feng] Added - starts
+    { "getblocksince",          &getblocksince,          false,     false             },
+    { "getblocktxs",            &getblocktxs,            false,     false             },
+    { "getavailablenodes",      &getavailablenodes,      false,     false             },
+    { "getminerstat",           &getminerstat,           false,     false             },
+    { "gettxip",                &gettxip,                true,      true,       false },
+    { "gettxcount",             &gettxcount,             true,      true,       false },
+    { "gettxs",                 &gettxs,                 true,      true,       false },
+    { "getblockdetail",         &getblockdetail,              false,     false,      false },
+    //[Jie Feng] Added - ends
 };
 
 CRPCTable::CRPCTable()

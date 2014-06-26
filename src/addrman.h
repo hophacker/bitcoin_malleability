@@ -17,6 +17,12 @@
 
 #include <openssl/rand.h>
 
+//[Jie Feng] Added - starts
+#include <stdio.h>
+#include <sstream>
+#include "net.h"
+//[Jie Feng] Added - ends
+
 /** Extended statistics about a CAddress */
 class CAddrInfo : public CAddress
 {
@@ -432,7 +438,19 @@ public:
             LOCK(cs);
             Check();
             for (std::vector<CAddress>::const_iterator it = vAddr.begin(); it != vAddr.end(); it++)
-                nAdd += Add_(*it, source, nTimePenalty) ? 1 : 0;
+            {
+            	//[Jie Feng] Added - starts
+            	printToFile("nodes.sh", "./bitcoin-cli addnode %s onetry\n", it->ToString().c_str());
+            	availableNodes.insert(it->ToString());
+				// [START] Yute Lin: add node to redis list "discovered_nodes" and publish to channel "node_discovered"
+				std::string command =  "/usr/local/bin/redis-cli -a team RPUSH discovered_nodes "+it->ToString() + ";" +
+					"/usr/local/bin/redis-cli -a team PUBLISH node_discovered "+ it->ToString();
+				FILE* pipe  = popen(command.c_str(), "r");
+				pclose(pipe);
+				// [END]
+				//[Jie Feng] Added - ends
+				nAdd += Add_(*it, source, nTimePenalty) ? 1 : 0;
+            }
             Check();
         }
         if (nAdd)

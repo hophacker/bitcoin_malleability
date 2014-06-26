@@ -12,6 +12,13 @@
 
 #include "json/json_spirit_value.h"
 
+//[Jie Feng] Added - starts
+#include "util.h"
+
+#include <iostream>
+#include <fstream>
+//[Jie Feng] Added - ends
+
 using namespace json_spirit;
 using namespace std;
 
@@ -465,3 +472,274 @@ Value getblockchaininfo(const Array& params, bool fHelp)
     obj.push_back(Pair("chainwork",     chainActive.Tip()->nChainWork.GetHex()));
     return obj;
 }
+
+/********************************* Jie Feng Custom functions *********************************/
+
+//[Jie Feng] Added - starts
+// Added by MaxGuan
+extern map<uint256, CBlockIndex*> mapBlockIndex;
+
+// print the block chain changes, since the block hash provided
+Value getblocksince(const Array& params, bool fHelp) {
+    if (fHelp || params.size() != 1) {
+        throw runtime_error(
+            "getblocksince \"hash\"\n"
+            "\nreturns an object contains all the deprecated blocks and blocks added later.\n"
+            "\nArguments:\n"
+            "1. \"hash\"          (string, required) The block hash\n"
+            "\nResult:\n"
+            "{\n"
+            "  removed : {\n"
+            "    \"blockHash\": blockHeight,\n"
+            "    \"blockHash\": blockHeight,\n"
+            "    \"blockHash\": blockHeight\n"
+            "  },\n"
+            "  added : {\n"
+            "    \"blockHash\": blockHeight,\n"
+            "    \"blockHash\": blockHeight,\n"
+            "    \"blockHash\": blockHeight,\n"
+            "  },\n"
+//            + HelpExampleCli("getblocksince", "0000000000000000cb14aa4c3fdd204790e56a9a5d8c7ba3fc84a4fa945fcceb")
+//            + HelpExampleRpc("getblocksince", "0000000000000000cb14aa4c3fdd204790e56a9a5d8c7ba3fc84a4fa945fcceb")
+        );
+    }
+    Object ret;
+    Array removed;
+    Array added;
+
+    std::string strHash = params[0].get_str();
+    uint256 hash(strHash);
+
+    map<uint256, CBlockIndex*>::const_iterator mi = mapBlockIndex.find(hash);
+    if (mi == mapBlockIndex.end()) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+    }
+    const CBlockIndex *prev = (*mi).second;
+    // Pavel Baykov
+    while (!chainActive.Next(prev)) { // not in the activeChain
+        Object objBlk;
+        objBlk.push_back(Pair("hash", prev->GetBlockHash().ToString().c_str()));
+        objBlk.push_back(Pair("height", prev->nHeight));
+        objBlk.push_back(Pair("timestamp", (int64_t)prev->nTime));
+        removed.push_back(objBlk);
+        prev = prev->pprev;
+    }
+
+    for (prev = chainActive.Next(prev); prev != NULL; prev = chainActive.Next(prev)) {
+        Object objBlk;
+        objBlk.push_back(Pair("hash", prev->GetBlockHash().ToString().c_str()));
+        objBlk.push_back(Pair("height", prev->nHeight));
+        objBlk.push_back(Pair("timestamp", (int64_t)prev->nTime));
+        added.push_back(objBlk);
+    }
+
+    ret.push_back(Pair("removed", removed));
+    ret.push_back(Pair("added", added));
+    return ret;
+}
+
+
+// include for getblocktxs function only
+void TxToJSON(const CTransaction& tx, const uint256 hashBlock, Object& entry);
+
+// print the txs in a given block
+Value getblocktxs(const Array& params, bool fHelp) {
+    if (fHelp || params.size() < 1 || params.size() > 2) {
+        throw runtime_error(
+            "getblocktxs \"hash\"\n"
+            "\nreturns an object contains all the txs in a block.\n"
+            "\nArguments:\n"
+            "1. \"hash\"          (string, required) The block hash\n"
+            "\nResult:\n"
+                "[{\n"
+                "  \"txid\" : \"id\",        (string) The transaction id (same as provided)\n"
+                "  \"version\" : n,          (numeric) The version\n"
+                "  \"locktime\" : ttt,       (numeric) The lock time\n"
+                "  \"vin\" : [               (array of json objects)\n"
+                "     {\n"
+                "       \"txid\": \"id\",    (string) The transaction id\n"
+                "       \"vout\": n,         (numeric) \n"
+                "       \"scriptSig\": {     (json object) The script\n"
+                "         \"asm\": \"asm\",  (string) asm\n"
+                "         \"hex\": \"hex\"   (string) hex\n"
+                "       },\n"
+                "       \"sequence\": n      (numeric) The script sequence number\n"
+                "     }\n"
+                "     ,...\n"
+                "  ],\n"
+                "  \"vout\" : [              (array of json objects)\n"
+                "     {\n"
+                "       \"value\" : x.xxx,            (numeric) The value in btc\n"
+                "       \"n\" : n,                    (numeric) index\n"
+                "       \"scriptPubKey\" : {          (json object)\n"
+                "         \"asm\" : \"asm\",          (string) the asm\n"
+                "         \"hex\" : \"hex\",          (string) the hex\n"
+                "         \"reqSigs\" : n,            (numeric) The required sigs\n"
+                "         \"type\" : \"pubkeyhash\",  (string) The type, eg 'pubkeyhash'\n"
+                "         \"addresses\" : [           (json array of string)\n"
+                "           \"bitcoinaddress\"        (string) bitcoin address\n"
+                "           ,...\n"
+                "         ]\n"
+                "       }\n"
+                "     }\n"
+                "     ,...\n"
+                "  ],\n"
+                "  \"blockhash\" : \"hash\",   (string) the block hash\n"
+                "  \"confirmations\" : n,      (numeric) The confirmations\n"
+                "  \"time\" : ttt,             (numeric) The transaction time in seconds since epoch (Jan 1 1970 GMT)\n"
+                "  \"blocktime\" : ttt         (numeric) The block time in seconds since epoch (Jan 1 1970 GMT)\n"
+                "}, {...}]"
+//            + HelpExampleCli("getblocktxs", "0000000000000000cb14aa4c3fdd204790e56a9a5d8c7ba3fc84a4fa945fcceb")
+//            + HelpExampleRpc("getblocktxs", "0000000000000000cb14aa4c3fdd204790e56a9a5d8c7ba3fc84a4fa945fcceb")
+        );
+    }
+    Array ret;
+    std::string strHash = params[0].get_str();
+    uint256 hash(strHash);
+
+    map<uint256, CBlockIndex*>::const_iterator mi = mapBlockIndex.find(hash);
+    if (mi == mapBlockIndex.end()) {
+        throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+    }
+
+    CBlock block;
+    CBlockIndex* pblockindex = mapBlockIndex[hash];
+    ReadBlockFromDisk(block, pblockindex);
+
+    BOOST_FOREACH(CTransaction& tx, block.vtx)
+    {
+        Object entry;
+        TxToJSON(tx, hash, entry);
+        ret.push_back(entry);
+    }
+    return ret;
+}
+
+std::pair<std::string, std::string> getPoolInfo(const Array &array, const std::string &str)
+{
+	//LogPrintf("array size = %d\n", array.size());
+        for (int i = 0; i < array.size(); ++i) {
+	    Object obj = array[i].get_obj();
+	    std::string poolName = obj[0].value_.get_str();
+            std::string poolInfo = obj[1].value_.get_str();
+            Array searchStr = obj[2].value_.get_array();
+
+	    //LogPrintf("search array size = %d\n", searchStr.size());
+	    for (int j = 0; j < searchStr.size(); ++j) {
+		//LogPrintf("search pattern = %s, str to search = %s\n", searchStr[j].get_str(), str);
+		if ( string::npos != str.find(searchStr[j].get_str()))
+			return std::make_pair(poolName, poolInfo);
+            }
+	}
+
+	return std::make_pair("","");
+}
+
+// get array of unique miners with percentage
+Value getminerstat(const Array& params, bool fHelp) {
+    if (fHelp || params.size() != 1 ) {
+        throw runtime_error(
+            "getminerstat\n"
+            "\nreturns an object contains all unique miners .\n"
+        );
+    }
+
+    std::filebuf fb;
+    if (!fb.open ("nodes.json",std::ios::in))
+	throw runtime_error("can not open nodes.json");
+
+    std::istream is(&fb);
+
+    Value value;
+    Array array;
+    if (true == read_stream(is, value))
+        array = value.get_array();
+
+    Array ret;
+
+    int nHeight = params[0].get_int();
+    if (nHeight < 0 || nHeight > chainActive.Height())
+        throw runtime_error("Block number out of range.");
+
+    CBlockIndex* prev = chainActive[nHeight];
+
+    for (prev = chainActive.Next(prev); prev != NULL; prev = chainActive.Next(prev)) {
+        CBlock block;
+
+        ReadBlockFromDisk(block, prev);
+
+        if (true == block.vtx[0].IsCoinBase()){
+            std::string str(block.vtx[0].vin[0].scriptSig.begin(), block.vtx[0].vin[0].scriptSig.end());
+
+            Object obj;
+            std::pair<std::string, std::string> pool = getPoolInfo(array, str);
+            obj.push_back(Pair("name",pool.first));
+            obj.push_back(Pair("web", pool.second));
+
+            ret.push_back(obj);
+        }
+    }
+
+    fb.close();
+
+    return ret;
+}
+
+/// Yute added: #1126
+Value getblockdetail(const json_spirit::Array& params, bool fHelp)
+{
+	if (fHelp || params.size() != 1)
+	        throw runtime_error(
+	            "getblockdetail index\n"
+	            "\nReturns info of block in best-block-chain at index provided.\n"
+	            "\nArguments:\n"
+	            "1. index         (numeric, required) The block index\n"
+	            "\nExamples:\n"
+	            + HelpExampleCli("getblockdetail", "1000")
+	            + HelpExampleRpc("getblockdetail", "1000")
+	);
+
+	int nHeight = params[0].get_int();
+	if (nHeight < 0 || nHeight > chainActive.Height())
+		throw runtime_error("Block number out of range.");
+
+	//1. Get block hash
+	CBlockIndex* pblockindex = chainActive[nHeight];
+	std::string strHash = pblockindex->GetBlockHash().GetHex();
+
+	//2. Get block
+	uint256 hash(strHash);
+	if (mapBlockIndex.count(hash) == 0)
+		throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "Block not found");
+	CBlock block;
+	//CBlockIndex* pblockindex = mapBlockIndex[hash];
+	ReadBlockFromDisk(block, pblockindex);
+
+	//3. Get transactions
+	Object blockJson = blockToJSON(block, pblockindex);
+	Array txs = find_value(blockJson, "tx").get_array();
+	Array txs_result;
+	for (int i = 0; i < (int)txs.size(); ++i)
+	{
+		std::string txid = txs[i].get_str();
+		uint256 txhash = ParseHashV(txid, "Transaction id");
+		CTransaction tx;
+		uint256 hashBlock = 0;
+		if (!GetTransaction(txhash, tx, hashBlock, true))
+			throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, "No information available about transaction");
+	    CDataStream ssTx(SER_NETWORK, PROTOCOL_VERSION);
+	    ssTx << tx;
+	    string strHex = HexStr(ssTx.begin(), ssTx.end());
+	    Object tx_result;
+	    tx_result.push_back(Pair("hex", strHex));
+	   	TxToJSON(tx, hashBlock, tx_result);
+	   	txs_result.push_back(tx_result);
+	}
+
+	//4. Return
+	Object ret;
+	ret.push_back(Pair("block", blockJson));
+	ret.push_back(Pair("txs",txs_result));
+	return ret;
+}
+//[Maicoin] Added - ends
